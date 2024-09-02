@@ -19,3 +19,10 @@ class Network(nn.Module):
         self.fc2 = nn.Linear(64, 64)
         self.fc3 = nn.Linear(64, action_size)
     
+    # create the forward function to propagate the signal from input layer to output
+    def forward(self, state):
+        x = F.relu(self.fc1(state))
+        x = F.relu(self.fc2(x))
+        return self.fc3(x)
+    
+    
