@@ -1,4 +1,3 @@
-import os
 import random
 import numpy as np
 import torch
@@ -86,6 +85,10 @@ class ReplayMemory(object):
         # and wheter we are done or not
         self.memory = []
 
+    # Add __len__ method to allow the use of len()
+    def __len__(self):
+        return len(self.memory)
+    
     # push() method
     # add the experience event into the memory buffer
     # check that we don't exceed the capacity
@@ -225,6 +228,62 @@ class Agent():
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
             target_param.data.copy_(tau*local_param.data + (1.0-tau)*target_param.data)
     
+# INITIALIZING THE DQN AGENT
+agent = Agent(state_size=state_size, action_size=number_actions, seed=0)
 
+# TRAINING THE AGENT
 
-    
+# initialise the trainig parameters
+episodes = 2000 # max number of episodes over which we want to train the agent
+max_t = 1000 # max number of time steps per episode
+eps_start = 1.0 # 1st epsilon value in epsilon-greedy startegy
+eps_end = 0.01 # final epsilon value in epsilon-greedy startegy
+eps_decay = 0.995 # decay rate in epsilon-greedy startegy
+
+# scores tracking
+scores = [] # list containing scores from each episode
+scores_window = deque(maxlen=100) # last 100 scores
+eps = eps_start # initialize epsilon
+
+# training loop
+for i in range(episodes + 1):
+    # reset the environment to its initial state at each episode
+    state, _ = env.reset()
+    # reset the score to 0 at each episode
+    score = 0
+
+    # loop over the max number of time steps per episode
+    for t in range(max_t):
+        # select an action using the epsilon-greedy startegy
+        action = agent.act(state, eps)
+        # execute the action in the environment and receive the next state, reward and other information
+        next_state, reward, terminated, truncated, _ = env.step(action)
+        done = terminated or truncated
+        # perform the learning step
+        agent.step(state, action, reward, next_state, done)
+        # update the state
+        state = next_state
+        # update the score
+        score += reward
+        if done:
+            break
+
+    # save the most recent score
+    scores_window.append(score) 
+    scores.append(score) 
+
+    # update epsilon
+    eps = max(eps_end, eps_decay*eps) 
+
+    # print information
+    print('\rEpisode {}\tAverage Score: {:.2f}'.format(i, np.mean(scores_window)), end="")
+    # if the environment is solved, print the last line with no dynamic override and exit the loop
+    if i % 100 == 0:
+        print('\rEpisode {}\tAverage Score: {:.2f}'.format(i, np.mean(scores_window)))
+
+    # check if the environment is solved
+    if np.mean(scores_window)>=200.0:
+        print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i-100, np.mean(scores_window)))
+        # save the parameters of the trained model
+        torch.save(agent.local_qnetwork.state_dict(), 'checkpoint.pth')
+        break # exit the training loop
