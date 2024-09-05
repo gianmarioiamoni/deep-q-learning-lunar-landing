@@ -287,3 +287,47 @@ for i in range(episodes + 1):
         # save the parameters of the trained model
         torch.save(agent.local_qnetwork.state_dict(), 'checkpoint.pth')
         break # exit the training loop
+
+
+# PLOTTING THE RESULTS
+import glob
+import io
+import base64
+import imageio
+import imageio_ffmpeg as ffmpeg
+from IPython.display import HTML, display
+from gymnasium.wrappers.monitoring.video_recorder import VideoRecorder
+
+# show video of model
+def show_video_of_model(agent, env_name):
+    env = gym.make(env_name, render_mode="rgb_array")
+    state, _ = env.reset()
+    done = False
+    frames = []
+    while not done:
+        frames.append(env.render())
+        action = agent.act(state)
+        state, reward, terminated, truncated, _ = env.step(action.item())
+        done = terminated or truncated
+    env.close()
+
+    # imageio.mimsave(f'vid/{env_name}.gif', [np.array(frame) for frame in frames], fps=30)
+    # imageio.mimsave(f'./{env_name}.gif', [np.array(frame) for frame in frames], fps=30)
+    imageio.mimsave('video.mp4', frames, fps=30)
+show_video_of_model(agent, 'LunarLander-v2')
+
+# show video
+def show_video():
+    mp4list = glob.glob('*.mp4')
+    if len(mp4list) > 0:
+        mp4 = mp4list[0]
+        video = io.open(mp4, 'r+b').read()
+        encoded = base64.b64encode(video)
+        display(HTML(data='''<video alt="test" autoplay 
+                loop controls style="height: 400px;">
+                <source src="data:video/mp4;base64,{0}" type="video/mp4" />
+             </video>'''.format(encoded.decode('ascii'))))
+    else:
+        print("Could not find video")
+
+show_video()
