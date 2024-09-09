@@ -16,17 +16,55 @@ import random
 
 # create a 3 full coneection level neural network 
 class Network(nn.Module):
+    """
+    This class represents the neural network used in the DQN model.
+    
+    The network is a fully connected feedforward neural network with 3 layers.
+
+    The first layer has 64 neurons, the second layer has 64 neurons, 
+    and the third layer has the same number of neurons as the number of actions 
+    the agent can take.
+    """
     def __init__(self, state_size, action_size, seed = 42):
+        """
+        Constructor method for the Network class.
+        
+        Args:
+            state_size (int): The size of the state space.
+            action_size (int): The size of the action space.
+            seed (int): The seed for the random number generator.
+        """
         super(Network, self).__init__()
+
         self.seed = torch.manual_seed(seed)
+        
+        # First fully connected layer with 64 neurons
         self.fc1 = nn.Linear(state_size, 64)
+        
+        # Second fully connected layer with 64 neurons
         self.fc2 = nn.Linear(64, 64)
+        
+        # Output layer with the same number of neurons as the number of actions
         self.fc3 = nn.Linear(64, action_size)
     
     # create the forward function to propagate the signal from input layer to output
     def forward(self, state):
+        """
+        Forward function to propagate the signal from input layer to output layer.
+        
+        Args:
+            state (torch.Tensor): The input state to the network.
+        
+        Returns:
+            torch.Tensor: The output of the network.
+        """
+        # fully connected layer with 64 neurons and ReLU activation function
         x = F.relu(self.fc1(state))
+        
+        # fully connected layer with 64 neurons and ReLU activation function
         x = F.relu(self.fc2(x))
+        
+        # output layer with the same number of neurons as the number of actions
         return self.fc3(x)
 
 ###
@@ -38,17 +76,17 @@ class Network(nn.Module):
 # get the Lunarlander-v2 environment
 env = gym.make('LunarLander-v2')
 
-# get parameters
-state_shape = env.observation_space.shape
-state_size = env.observation_space.shape[0]
-number_actions = env.action_space.n
+# get parameters from the environment
+state_shape = env.observation_space.shape # (8,) this is the shape of the state space
+state_size = env.observation_space.shape[0] # 8 this is the size of the state space, i.e. the number of features in the state space 
+number_actions = env.action_space.n # 4 this is the size of the action space, i.e. the number of possible actions
 print (f"state_shape: {state_shape}, state_size: {state_size}, number_actions: {number_actions}")
 
 
 # INITIALIZATION OF THE HYPERPARAMETERS
 
-# the size of the memeory of the AI; 
-# how many experiences (state, action, reward, next date) in the memory of the agent; 
+# the size of the memory of the AI; 
+# how many experiences (state, action, reward, next, done) in the memory of the agent; 
 # used to stabilize and improve the training process
 BUFFER_SIZE = int(1e5)  # replay buffer size
 
@@ -56,16 +94,23 @@ BUFFER_SIZE = int(1e5)  # replay buffer size
 # used to update the model parameters
 BATCH_SIZE = 100     # minibatch size
 
-# the present value of future rewards; close to 1
+# the present value of future rewards; i.e. it's the discount factor applied to the future rewards
+# used to stabilize and improve the training process
+# close to 1 because we want to maximize the reward
+# 
 GAMMA = 0.99            # discount factor
 
 # interpolation parameter is used to interpolate the present value of future rewards
+# i.e. it's used to update the target network parameters with those in the local network
 TAU = 1e-3              # interpolation parameter for soft update of target parameters
 
-# learning rate is used to update the model parameters 
+# learning rate is used to update the model parameters. i.e. how fast the model is updated 
+# close to 0 because we want to minimize the loss
+# 
 LR = 5e-4               # learning rate 
 
-# update rating of the network
+# update rating of the network, i.e. how often to update the model parameters
+# 
 UPDATE_EVERY = 4        # how often to update the network
 
 
@@ -116,14 +161,17 @@ class ReplayMemory(object):
 # IMPLEMENTING THE DQN CLASS
 
 # Agent class
-# Define the behaviour of an agent that interacts with our space environment using deep Q-network
+# Define the behaviour of an agent that interacts with our space environment 
+# using deep Q-network.
 #
-# The agent maintains 2 Q-networks: local_qnetwork and target_qnetwork
+# The agent maintains 2 Q-networks: local_qnetwork and target_qnetwork.
 # The local_qnetwork will select the actions
 # The target_qnetwork will calculate the target Q-values that will be used
 # in the training of the local_qnetwork.
+#
 # This double Q-network setup will stabilize the learning process, by using
-# the soft_update() method, that update tht target_qnetwork parameters with those in the local_qnetwork
+# the soft_update() method, that update the target_qnetwork parameters with 
+# those in the local_qnetwork
 class Agent():
     def __init__(self, state_size, action_size, seed = 42):
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -145,6 +193,9 @@ class Agent():
         self.t_step = 0
     
     # step() method
+    # It will be called after every action made by the agent
+    # and it will store the experience in the replay memory.
+    # It will only learn if enough samples are available in the memory
     def step(self, state, action, reward, next_state, done):
         # save experience in replay memory
         self.memory.push((state, action, reward, next_state, done))
@@ -160,8 +211,9 @@ class Agent():
     # act() method
     # It will help the agent choose an action based on its understanding of the optimal policy.
     # Those actions will be returned from the local_qnetwork, that will forward propagate the state 
-    # to return the action values. 
-    # Then, following an epsilon-greedy policy, It will retrun the final action.
+    # to return the action values.
+    # The action values will be used to select the action with the highest Q-value. 
+    # Then, following an epsilon-greedy policy, It will return the final action.
     # The fact that sometimes we select random actions, allows the agent to explore some more actions
     # which could potentially lead to a better result at the end.
     def act(self, state, eps=0.):
@@ -192,8 +244,10 @@ class Agent():
     def learn(self, experiences, gamma):
         # extract each component of the sample and convert it in a pyTorch tensor
         states, next_states, actions, rewards, dones = experiences
+
         # get the maximum predicted Q-values for the next states from the target network
         Q_targets_next = self.target_qnetwork(next_states).detach().max(1)[0].unsqueeze(1)
+
         # compute the target Q-values for the current states
         Q_targets = rewards + (gamma * Q_targets_next * (1 - dones))
 
@@ -205,8 +259,10 @@ class Agent():
 
         # optimize the model by minimizing the loss
         self.optimizer.zero_grad() # zero the gradient buffers
+
         # backpropagate the loss through the network to update the weights  
         loss.backward()
+
         # perform a single optimization step using gradient descent to update the weights
         self.optimizer.step()
 
@@ -221,8 +277,12 @@ class Agent():
         # loop over the target network's parameters and the local network's parameters
         # and update the target parameters accordingly.
         # The local network's parameters are updated with a factor tau
-        # while the target network's parameters are updated with a factor 1-tau
-        # this helps to stabilize the training
+        # while the target network's parameters are updated with a factor 1-tau;
+        # this helps to stabilize the training.
+        #
+        # The tau parameter is a hyperparameter that controls the degree of smoothness of the updates.
+        # The closer it is to 1, the smoother the updates.
+        #
         # The zip() function returns an iterator that combines multiple iterables into one.
         # It is used to loop over multiple iterables at the same time, so that they can be used in parallel.
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
@@ -232,13 +292,13 @@ class Agent():
 agent = Agent(state_size=state_size, action_size=number_actions, seed=0)
 
 # TRAINING THE AGENT
-
 # initialise the trainig parameters
 episodes = 2000 # max number of episodes over which we want to train the agent
 max_t = 1000 # max number of time steps per episode
 eps_start = 1.0 # 1st epsilon value in epsilon-greedy startegy
 eps_end = 0.01 # final epsilon value in epsilon-greedy startegy
 eps_decay = 0.995 # decay rate in epsilon-greedy startegy
+solved_score = 200.0 # score at which we consider the environment to be solved
 
 # scores tracking
 scores = [] # list containing scores from each episode
@@ -282,7 +342,7 @@ for i in range(episodes + 1):
         print('\rEpisode {}\tAverage Score: {:.2f}'.format(i, np.mean(scores_window)))
 
     # check if the environment is solved
-    if np.mean(scores_window)>=200.0:
+    if np.mean(scores_window)>=solved_score:
         print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i-100, np.mean(scores_window)))
         # save the parameters of the trained model
         torch.save(agent.local_qnetwork.state_dict(), 'checkpoint.pth')
@@ -306,8 +366,8 @@ def show_video_of_model(agent, env_name):
     frames = []
     while not done:
         frames.append(env.render())
-        action = agent.act(state)
-        state, reward, terminated, truncated, _ = env.step(action.item())
+        action = agent.act(state) # select an action using the epsilon-greedy startegy
+        state, reward, terminated, truncated, _ = env.step(action.item()) # execute the action in the environment
         done = terminated or truncated
     env.close()
 
